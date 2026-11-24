@@ -1,0 +1,31 @@
+{
+  "name": "actiontrack",
+  "version": "0.1.0",
+  "description": "Track action items from markdown meeting notes and draft follow-up emails",
+  "type": "module",
+  "bin": {
+    "actiontrack": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "chrono-node": "^2.10.3",
+    "cli-table3": "^0.6.5",
+    "commander": "^15.1.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}
