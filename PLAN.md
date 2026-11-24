@@ -6,7 +6,7 @@ CLI that ingests markdown meeting notes, tracks action items, and drafts follow-
 
 | Area | Decision |
 |---|---|
-| Stack | Node.js 20+ / TypeScript, `commander` (CLI), `better-sqlite3` (storage), `gray-matter` (front-matter), `chrono-node` (relative dates), `vitest` (tests) |
+| Stack | Node.js 20+ / TypeScript, `commander` (CLI), built-in `node:sqlite` (storage, no native build), `gray-matter` (front-matter), `chrono-node` (relative dates), `vitest` (tests) |
 | Storage | SQLite file `~/.actiontrack/actiontrack.db` (override with `ACTIONTRACK_DB`) |
 | Note format | YAML front-matter with `date` and `attendees`; action items are `- [ ] ...` / `- [x] ...` lines |
 | Due dates | Resolved relative to the **meeting date** (e.g. "by Friday" = first Friday on/after the meeting) |
@@ -39,6 +39,7 @@ Discussion free text...
 
 `items`
 - `id` INTEGER PK
+- `owner_key` TEXT: email, `name:<full name>`, `raw:<name as written>` or `unassigned`; used for dedup and filters
 - `owner_email` TEXT NULL (NULL = unassigned)
 - `owner_raw` TEXT — name as written in the note
 - `owner_status` TEXT — `resolved | ambiguous | unknown | unassigned`
@@ -49,7 +50,7 @@ Discussion free text...
 - `created_at`, `completed_at`
 - `possible_dup_of` INTEGER NULL
 
-`item_sources` — `(item_id, file_path, meeting_date, line_no)`: every note an item appeared in.
+`item_sources` — `(item_id, file_path, line_no, raw_text, meeting_title, meeting_date)`: every note line an item appeared in. `raw_text` lets re-ingest detect edited lines.
 
 `ingest_runs` / `ingest_errors` — per-run report of skipped files and reasons.
 

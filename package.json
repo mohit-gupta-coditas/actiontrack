@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepare": "tsc"
   },
   "license": "UNLICENSED",
   "private": true,
@@ -27,5 +28,8 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
