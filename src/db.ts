@@ -7,6 +7,7 @@ export type Db = DatabaseSync;
 
 export interface ItemRow {
   id: number;
+  owner_key: string;
   owner_email: string | null;
   owner_name: string | null;
   owner_raw: string | null;
@@ -33,6 +34,7 @@ export interface SourceRow {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS items (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_key        TEXT NOT NULL,
   owner_email      TEXT,
   owner_name       TEXT,
   owner_raw        TEXT,
@@ -47,7 +49,7 @@ CREATE TABLE IF NOT EXISTS items (
   completed_at     TEXT,
   possible_dup_of  INTEGER REFERENCES items(id)
 );
-CREATE INDEX IF NOT EXISTS idx_items_owner_norm ON items(owner_email, owner_raw, task_norm);
+CREATE INDEX IF NOT EXISTS idx_items_owner_norm ON items(owner_key, task_norm);
 
 CREATE TABLE IF NOT EXISTS item_sources (
   item_id       INTEGER NOT NULL REFERENCES items(id),
