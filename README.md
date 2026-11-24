@@ -4,6 +4,8 @@ CLI that reads markdown meeting notes, tracks action items, and drafts follow-up
 
 Parsing, due-date resolution, duplicate detection and the email text are plain code, so they use no LLM and cost zero tokens.
 
+New here? Start with **[HOW_TO_USE.md](HOW_TO_USE.md)**: setup on any laptop and day-to-day use. The design is in [PLAN.md](PLAN.md).
+
 ## Setup
 
 Requires Node.js 22.13+ (it uses the built-in `node:sqlite`, so there is no native build).
