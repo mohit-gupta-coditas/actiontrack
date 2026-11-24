@@ -1,6 +1,7 @@
 import type { Db } from '../db.js';
 import { renderFollowup, type EmailDraft } from '../email/template.js';
-import { resolveOwnerQuery, UserError } from '../owners.js';
+import { UserError } from '../errors.js';
+import { resolveOwnerQuery } from '../owners.js';
 import { list } from './list.js';
 
 export interface FollowupResult {

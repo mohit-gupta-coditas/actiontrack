@@ -50,6 +50,22 @@ actiontrack followup <owner> [--json]            # preview, or the Gmail draft p
 - `--status open` includes overdue items. An item is overdue when it is open and its due date is before today.
 - `--due-before` accepts `YYYY-MM-DD` or a phrase like `"next friday"`.
 
+### Conventions
+
+- Arguments are parsed with `commander`. `-h`/`--help` shows usage and `-v`/`--version` shows the version.
+- Flags can come before positional arguments (`actiontrack ingest --json notes/`). Everything after `--` is treated as positional (`actiontrack done -- 12`).
+- **stdout** carries command output only: tables, results, the email, and JSON. **stderr** carries warnings, status messages and errors. So `--json` output can always be piped straight into another tool.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Success (including `-h`, `-v`, and "nothing to follow up") |
+| 1 | General error: unknown item id, missing folder, ambiguous or unknown owner |
+| 2 | Misuse: unknown option, missing or invalid argument, no command given |
+| 127 | Unknown command |
+| 130 | Interrupted (Ctrl+C) |
+
+Set `DEBUG=1` to print stack traces for unexpected errors.
+
 ## Edge cases
 
 | Situation | Behaviour |

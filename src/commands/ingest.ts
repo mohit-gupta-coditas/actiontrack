@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Db, ItemRow } from '../db.js';
+import { UserError } from '../errors.js';
 import { jaccard, NEAR_DUP_THRESHOLD } from '../dedup.js';
 import { parseNote, type Meeting, type ParsedItem } from '../parse/note.js';
 import { ownerKey } from '../parse/owner.js';
@@ -25,7 +26,7 @@ export interface IngestReport {
 export function ingest(db: Db, folder: string): IngestReport {
   const dir = resolve(folder);
   if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
-    throw new Error(`not a folder: ${folder}`);
+    throw new UserError(`not a folder: ${folder}`);
   }
 
   const report: IngestReport = {

@@ -1,6 +1,5 @@
 import type { Db } from './db.js';
-
-export class UserError extends Error {}
+import { UserError } from './errors.js';
 
 interface OwnerRow {
   owner_key: string;
