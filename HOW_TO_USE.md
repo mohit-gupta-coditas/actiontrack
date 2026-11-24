@@ -73,34 +73,61 @@ The setup is done.
 
 Put each meeting in its own `.md` file in one folder, for example `~/meeting-notes/`.
 
-Each file must start with this header block:
+Start each file with a short header, then write anything you like:
 
 ```markdown
----
-title: Acme kickoff
-date: 2026-11-10
-attendees:
-  - Priya Sharma <priya.sharma@acme.com>
-  - Rahul Mehta <rahul@coditas.com>
----
+# Meeting: Quote portal kickoff
+Date: 2026-09-01
+Attendees: Priya Nair, Priya Shah, Rahul Mehta, Anita Desai
 
+## Discussion
 Anything you like here: discussion, decisions, etc.
 
-- [ ] Priya Sharma to send the revised quote by Friday
-- [ ] Rahul: book the demo room by 2026-12-01
-- [ ] Update the pricing sheet
+## Action items
+- [ ] Priya Nair to send the revised quote to Acme by Friday
+- [ ] Rahul: set up the staging environment by 2026-09-08
+- [ ] Anita & Rahul to agree on the component API
+- [ ] Someone to update the CRM notes
 - [x] Rahul to share the deck
 ```
 
-Rules for the header and action items:
+YAML front-matter (`---` / `date:` / `attendees:` / `---`) also works, if you prefer it.
 
-- **`date`** is required, in `YYYY-MM-DD` format.
-- **`attendees`** need an email in `<...>` so that follow-up emails know where to go.
-- **Action items** are lines starting with `- [ ]` (open) or `- [x]` (done).
-- **Owner:** start the item with the person's name, then `to`, `will`, `should`, `must` or `:`.
-  - If two attendees share a first name, write the **full name** (e.g. "Priya Sharma to …").
-- **Due date:** write it naturally: `by Friday`, `by Dec 3`, `next week`, `by 2026-12-01`.
+### The header
+
+- **`Date:`** is required. `2026-09-01`, `9 September 2026` and `Monday, 14 September 2026` all work.
+  - Vague dates such as "sometime last week" are rejected, and that note is skipped.
+- **`Attendees:`** is a comma-separated list of full names. Owners are matched against this list.
+  - If a note has no attendees line, owners are matched against everyone seen in your other notes.
+
+### Action items
+
+- **Format:** a line starting with `- [ ]` (open) or `- [x]` (done). `* [ ]` and `+ [ ]` also work.
+- **Owner:** start the line with the person's name, then `to`, `will`, `should`, `must` or `:`.
+  - `Priya Nair to …`, `Priya N. to …` and `@priya: …` all work.
+  - If two attendees share a first name (two Priyas), write the **full name** or an initial. A bare "Priya" is reported as ambiguous.
+  - `Anita & Rahul to …` creates one item for each person.
+  - `Lena (with Priya) to …` belongs to Lena.
+  - `Someone`, `Everyone`, `Team` and `TBD` are stored as unassigned.
+- **Due date:** write it naturally, such as `by Friday`, `by 25 Sep`, `next week` or `by 2026-12-01`.
   - It is counted from the meeting date, not from today.
+- **Ignored lines:** items inside `> quotes`, code blocks and `<!-- comments -->` are not counted as action items.
+
+### Email addresses: `people.json`
+
+Follow-up emails need an address for each person. Create a file called `people.json` in the **same folder as your notes**:
+
+```json
+{
+  "Priya Nair": "priya.nair@yourcompany.com",
+  "Priya Shah": "priya.shah@yourcompany.com",
+  "Rahul Mehta": "rahul.mehta@yourcompany.com"
+}
+```
+
+- Use the same full names as in your `Attendees:` lines.
+- `ingest` reads this file. After editing it, run `ingest` again.
+- If someone is missing, `followup` tells you exactly which line to add.
 
 ---
 
@@ -112,7 +139,11 @@ Rules for the header and action items:
 actiontrack ingest ~/meeting-notes
 ```
 
-On Windows, write the folder path the Windows way: `actiontrack ingest C:\Users\you\meeting-notes`.
+On Windows, how you write the path depends on your terminal:
+
+- **Git Bash** (prompt ends in `$`): use forward slashes, `actiontrack ingest C:/Users/you/meeting-notes`, or put the path in quotes. Unquoted backslashes are removed by Git Bash.
+- **PowerShell / Command Prompt:** `actiontrack ingest C:\Users\you\meeting-notes` works as is.
+- **Any terminal:** paths with spaces need quotes: `actiontrack ingest "C:/Users/you/My Notes"`.
 
 - You can run this as often as you like. Already-seen items are not added again.
 - Broken notes are skipped and listed under a warning; the rest still load.
@@ -195,8 +226,9 @@ Your data is kept. It lives in `.actiontrack` in your home folder, not in the pr
 | `actiontrack: command not found` / `not recognized` | Run `npm link` again inside the folder, then open a **new** terminal. Or use `npx actiontrack ...` from inside the folder. |
 | `node: command not found` | Node.js isn't installed or the terminal is old. Reinstall Node.js and open a new terminal. |
 | An error mentioning `node:sqlite` | Your Node.js is too old. Install version 22 or newer. |
+| `not a folder: C:UsersYou...` (backslashes missing) | You're in Git Bash. Quote the path or use forward slashes: `C:/Users/you/notes`. |
 | `"Priya" matches more than one owner` | Two people share that name. Use the full name or the email: `--owner "Priya Sharma"`. |
 | A note is listed under "skipped malformed notes" | Check that it starts with the `---` header block and has `date: YYYY-MM-DD`. |
-| `has no email address` for a follow-up | Add that person to the note's `attendees` with `<email>`, then run `ingest` again. |
+| `no email address for <name>` | Add `"<name>": "<email>"` to `people.json` in your notes folder, then run `ingest` again. |
 | I want to start over | Delete the `.actiontrack` folder in your home directory, then run `ingest` again. |
 | I want my data somewhere else | Set `ACTIONTRACK_DB` to a file path before running the commands. |

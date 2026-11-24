@@ -3,8 +3,9 @@ import { join, resolve } from 'node:path';
 import type { Db, ItemRow } from '../db.js';
 import { UserError } from '../errors.js';
 import { jaccard, NEAR_DUP_THRESHOLD } from '../dedup.js';
-import { parseNote, type Meeting, type ParsedItem } from '../parse/note.js';
-import { ownerKey } from '../parse/owner.js';
+import { parseNote, type Meeting, type ParsedItem, type ParseResult } from '../parse/note.js';
+import { ownerKey, type Attendee } from '../parse/owner.js';
+import { loadPeople, PEOPLE_FILE } from '../people.js';
 
 export interface IngestReport {
   files: number;
@@ -21,31 +22,53 @@ export interface IngestReport {
   unknownOwners: { id: number; owner: string; file: string; line: number }[];
   unassigned: { id: number; task: string; file: string; line: number }[];
   noDue: number;
+  people: number;
 }
 
 export function ingest(db: Db, folder: string): IngestReport {
   const dir = resolve(folder);
   if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
-    throw new UserError(`not a folder: ${folder}`);
+    // "C:Users..." means a Unix-style shell (Git Bash, WSL) swallowed the backslashes of C:\Users\...
+    const hint = /^[A-Za-z]:[^\\/]/.test(folder)
+      ? '\nhint: your shell removed the backslashes; quote the path ("C:\\Users\\...") or use forward slashes (C:/Users/...)'
+      : '';
+    throw new UserError(`not a folder: ${folder}${hint}`);
   }
 
   const report: IngestReport = {
     files: 0, parsed: 0, added: 0, merged: 0, completed: 0, unchanged: 0, removed: 0,
-    skipped: [], warnings: [], flagged: [], ambiguous: [], unknownOwners: [], unassigned: [], noDue: 0,
+    skipped: [], warnings: [], flagged: [], ambiguous: [], unknownOwners: [], unassigned: [], noDue: 0, people: 0,
   };
 
-  const notes: { file: string; meeting: Meeting; items: ParsedItem[] }[] = [];
+  const people = loadPeople(db, dir);
+  report.people = people.loaded;
+  for (const message of people.warnings) report.warnings.push({ file: PEOPLE_FILE, message });
+
   const files = readdirSync(dir).filter(f => f.toLowerCase().endsWith('.md')).sort();
   report.files = files.length;
 
+  const texts = new Map<string, string>();
+  const parsed = new Map<string, ParseResult>();
   for (const name of files) {
-    const file = join(dir, name);
-    let result;
     try {
-      result = parseNote(readFileSync(file, 'utf8'));
+      texts.set(name, readFileSync(join(dir, name), 'utf8'));
+      parsed.set(name, parseNote(texts.get(name)!));
     } catch (e) {
-      result = { ok: false as const, reason: `cannot read file: ${(e as Error).message}` };
+      parsed.set(name, { ok: false, reason: `cannot read file: ${(e as Error).message}` });
     }
+  }
+
+  // Notes without an attendees line are re-parsed against everyone known from the other notes.
+  const roster = buildRoster(db, [...parsed.values()]);
+  for (const [name, result] of parsed) {
+    if (result.ok && result.meeting.attendees.length === 0 && roster.length) {
+      parsed.set(name, parseNote(texts.get(name)!, roster));
+    }
+  }
+
+  const notes: { file: string; meeting: Meeting; items: ParsedItem[] }[] = [];
+  for (const [name, result] of parsed) {
+    const file = join(dir, name);
     if (!result.ok) {
       report.skipped.push({ file: name, reason: result.reason });
       db.prepare('INSERT INTO ingest_errors (file_path, reason, created_at) VALUES (?, ?, ?)')
@@ -64,7 +87,7 @@ export function ingest(db: Db, folder: string): IngestReport {
     db.exec('BEGIN');
     try {
       for (const item of note.items) ingestItem(db, note.file, note.meeting, item, report, detached);
-      detachMissingLines(db, note.file, note.items.map(i => i.line), detached);
+      detachMissingLines(db, note.file, note.items, detached);
       db.exec('COMMIT');
       report.parsed++;
     } catch (e) {
@@ -82,8 +105,8 @@ function ingestItem(
   const now = new Date().toISOString();
   const name = file.split(/[\\/]/).pop()!;
 
-  const seen = db.prepare('SELECT item_id, raw_text FROM item_sources WHERE file_path = ? AND line_no = ?')
-    .get(file, item.line) as { item_id: number; raw_text: string } | undefined;
+  const seen = db.prepare('SELECT item_id, raw_text FROM item_sources WHERE file_path = ? AND line_no = ? AND slot = ?')
+    .get(file, item.line, item.slot) as { item_id: number; raw_text: string } | undefined;
   if (seen && seen.raw_text === item.text) {
     // Already ingested: only pick up a checkbox that was ticked since.
     if (item.done && markDone(db, seen.item_id, now)) report.completed++;
@@ -92,7 +115,7 @@ function ingestItem(
   }
   if (seen) {
     // The line was edited (or lines shifted): detach it and process it like a new line.
-    db.prepare('DELETE FROM item_sources WHERE file_path = ? AND line_no = ?').run(file, item.line);
+    db.prepare('DELETE FROM item_sources WHERE file_path = ? AND line_no = ? AND slot = ?').run(file, item.line, item.slot);
     detached.add(seen.item_id);
   }
 
@@ -146,20 +169,39 @@ function ingestItem(
     if (!item.due.due && !item.done) report.noDue++;
   }
 
-  db.prepare(`INSERT INTO item_sources (item_id, file_path, line_no, raw_text, meeting_title, meeting_date)
-              VALUES (?, ?, ?, ?, ?, ?)`).run(id, file, item.line, item.text, meeting.title, meeting.date);
+  db.prepare(`INSERT INTO item_sources (item_id, file_path, line_no, slot, raw_text, meeting_title, meeting_date)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, file, item.line, item.slot, item.text, meeting.title, meeting.date);
 }
 
-/** Drops sources for lines of this file that no longer hold an action item. */
-function detachMissingLines(db: Db, file: string, lines: number[], detached: Set<number>): void {
-  const current = new Set(lines);
-  const rows = db.prepare('SELECT item_id, line_no FROM item_sources WHERE file_path = ?')
-    .all(file) as { item_id: number; line_no: number }[];
+/** Drops sources for lines (or owner slots) of this file that no longer hold an action item. */
+function detachMissingLines(db: Db, file: string, items: ParsedItem[], detached: Set<number>): void {
+  const current = new Set(items.map(i => `${i.line}:${i.slot}`));
+  const rows = db.prepare('SELECT item_id, line_no, slot FROM item_sources WHERE file_path = ?')
+    .all(file) as { item_id: number; line_no: number; slot: number }[];
   for (const r of rows) {
-    if (current.has(r.line_no)) continue;
-    db.prepare('DELETE FROM item_sources WHERE file_path = ? AND line_no = ?').run(file, r.line_no);
+    if (current.has(`${r.line_no}:${r.slot}`)) continue;
+    db.prepare('DELETE FROM item_sources WHERE file_path = ? AND line_no = ? AND slot = ?').run(file, r.line_no, r.slot);
     detached.add(r.item_id);
   }
+}
+
+/** Everyone listed as an attendee in any note, plus people.json, one entry per full name. */
+function buildRoster(db: Db, results: ParseResult[]): Attendee[] {
+  const byName = new Map<string, Attendee>();
+  for (const r of results) {
+    if (!r.ok) continue;
+    for (const a of r.meeting.attendees) {
+      const key = a.name.toLowerCase();
+      if (!byName.has(key) || (a.email && !byName.get(key)!.email)) byName.set(key, a);
+    }
+  }
+  const people = db.prepare('SELECT name, email FROM people').all() as { name: string; email: string }[];
+  for (const p of people) {
+    const key = p.name.toLowerCase();
+    const known = byName.get(key);
+    byName.set(key, { name: known?.name ?? p.name, first: p.name.split(/\s+/)[0], email: known?.email ?? p.email });
+  }
+  return [...byName.values()];
 }
 
 /** Deletes items whose every source line was edited away during this run. */

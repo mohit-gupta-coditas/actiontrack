@@ -7,6 +7,8 @@ export type State = 'open' | 'done' | 'overdue';
 export interface ListedItem extends ItemRow {
   state: State;
   sources: SourceRow[];
+  /** Items split from the same multi-owner line ("Anita & Rahul to …"). */
+  linked: number[];
 }
 
 export interface ListOptions {
@@ -41,11 +43,16 @@ export function list(db: Db, opts: ListOptions = {}): ListedItem[] {
                ORDER BY status = 'done', due_date IS NULL, due_date, id`;
   const rows = db.prepare(sql).all(...params) as unknown as ItemRow[];
   const sourcesOf = db.prepare('SELECT * FROM item_sources WHERE item_id = ? ORDER BY meeting_date, file_path');
+  const linkedTo = db.prepare(`
+    SELECT DISTINCT b.item_id AS id FROM item_sources a
+    JOIN item_sources b ON b.file_path = a.file_path AND b.line_no = a.line_no AND b.item_id <> a.item_id
+    WHERE a.item_id = ? ORDER BY b.item_id`);
 
   return rows.map(r => ({
     ...r,
     state: stateOf(r, now),
     sources: sourcesOf.all(r.id) as unknown as SourceRow[],
+    linked: (linkedTo.all(r.id) as { id: number }[]).map(l => l.id),
   }));
 }
 

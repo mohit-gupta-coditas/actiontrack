@@ -17,7 +17,16 @@ interface OwnerRow {
 export function resolveOwnerQuery(db: Db, query: string): string {
   const q = query.trim().toLowerCase();
   if (q === 'unassigned') return 'unassigned';
-  if (q.includes('@') || q.startsWith('name:') || q.startsWith('raw:')) return q;
+  if (q.startsWith('name:') || q.startsWith('raw:')) return q;
+  if (q.includes('@')) {
+    // Emails come from the notes themselves or from people.json.
+    const row = db.prepare(`
+      SELECT owner_key FROM items WHERE owner_email = ?
+      UNION SELECT 'name:' || name_key FROM people WHERE email = ?
+      LIMIT 1`).get(q, q) as { owner_key: string } | undefined;
+    if (!row) throw new UserError(`no owner with email ${query} (check the attendees or people.json)`);
+    return row.owner_key;
+  }
 
   const rows = db.prepare(
     'SELECT DISTINCT owner_key, owner_name, owner_raw, owner_status, owner_candidates FROM items',

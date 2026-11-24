@@ -62,15 +62,12 @@ describe('exit codes', () => {
   it.each([
     [['done', '999'], /no item with id 999/],
     [['ingest', 'does-not-exist'], /not a folder/],
-    [['followup', 'nobody@example.com', '--json'], null],
-  ])('1 for runtime errors, 0 otherwise: %j', async (args, message) => {
+    [['followup', 'nobody@example.com', '--json'], /no owner with email/],
+  ])('1 for runtime errors: %j', async (args, message) => {
     const r = await cli(...(args as string[]));
-    if (message) {
-      expect(r.code).toBe(1);
-      expect(r.stderr).toMatch(message);
-    } else {
-      expect(r.code).toBe(0);
-    }
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toMatch(message);
   });
 
   it('1 for an ambiguous owner, listing the choices on stderr', async () => {
@@ -124,7 +121,7 @@ describe('output channels', () => {
 
   it('status messages without data go to stderr', async () => {
     await cli('ingest', notes);
-    const r = await cli('list', '--owner', 'nobody@example.com');
+    const r = await cli('list', '--due-before', '2000-01-01');
     expect(r).toMatchObject({ code: 0, stdout: '' });
     expect(r.stderr).toMatch(/No matching items/);
   });

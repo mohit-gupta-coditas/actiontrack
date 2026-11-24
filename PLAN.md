@@ -8,9 +8,10 @@ CLI that ingests markdown meeting notes, tracks action items, and drafts follow-
 |---|---|
 | Stack | Node.js 20+ / TypeScript, `commander` (CLI), built-in `node:sqlite` (storage, no native build), `gray-matter` (front-matter), `chrono-node` (relative dates), `vitest` (tests) |
 | Storage | SQLite file `~/.actiontrack/actiontrack.db` (override with `ACTIONTRACK_DB`) |
-| Note format | YAML front-matter with `date` and `attendees`; action items are `- [ ] ...` / `- [x] ...` lines |
+| Note format | `# Meeting:` / `Date:` / `Attendees:` header lines (as used in practice) or YAML front-matter; action items are `- [ ]` / `- [x]` lines |
 | Due dates | Resolved relative to the **meeting date** (e.g. "by Friday" = first Friday on/after the meeting) |
-| Owners | Resolved against the note's attendees list; owner key = email |
+| Owners | Resolved against the note's attendees (or, without attendees, everyone known); owner key = full name; multi-owner lines become one linked item per owner |
+| Emails | `people.json` in the notes folder, or `Name <email>` attendees |
 | Duplicates | Auto-merge on exact normalized match; flag near-matches (word overlap ≥ 0.6) as "possible duplicate of #id" |
 | Missing owner / due | Stored and flagged: owner `unassigned`, due empty (never overdue) |
 | Gmail | CLI renders the email from a template (no LLM) and emits JSON; Claude Code relays it with one Gmail MCP `create_draft` call per owner. No send tool is ever used. |

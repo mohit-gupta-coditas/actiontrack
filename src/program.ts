@@ -159,6 +159,7 @@ function formatTable(items: ListedItem[]): string {
   });
   for (const i of items) {
     const flags = [
+      i.linked.length ? `with ${i.linked.map(id => `#${id}`).join(' ')}` : '',
       i.possible_dup_of ? `dup? #${i.possible_dup_of}` : '',
       !i.due_date && i.state !== 'done' ? 'no due date' : '',
     ].filter(Boolean).join(', ');

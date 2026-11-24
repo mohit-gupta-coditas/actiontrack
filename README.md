@@ -21,23 +21,21 @@ Data is stored in `~/.actiontrack/actiontrack.db`. Set `ACTIONTRACK_DB=/path/to/
 ## Note format
 
 ```markdown
----
-title: Acme kickoff
-date: 2026-11-10
-attendees:
-  - Priya Sharma <priya.sharma@acme.com>
-  - Rahul Mehta <rahul@coditas.com>
----
-Free text...
+# Meeting: Quote portal kickoff
+Date: 2026-09-01
+Attendees: Priya Nair, Priya Shah, Rahul Mehta
 
-- [ ] Priya Sharma to send the revised quote by Friday
-- [ ] Rahul: book the demo room by 2026-12-01
+## Action items
+- [ ] Priya Nair to send the revised quote by Friday
+- [ ] Rahul: set up staging by 2026-09-08
 - [x] Rahul to share the deck
 ```
 
-- `date` is required (`YYYY-MM-DD`). `attendees` can be a list or a comma-separated string.
-- The owner is the leading name, written as `Name to|will|should|must …` or `Name: …`.
-- The due date is any date phrase, such as `by Friday`, `before Dec 3`, `next week` or `2026-12-01`. It is resolved relative to the **meeting date**, looking forward, so "by Friday" in a Friday meeting means that same day.
+- **Header:** plain header lines (`Date:` and `Attendees:`) or YAML front-matter (`date:` / `attendees:`).
+- **Date:** required. Accepts `YYYY-MM-DD` or a full written date such as `Monday, 14 September 2026`.
+- **Owner:** the leading name, written as `Name to|will|should|must …`, `Name: …` or `@name: …`.
+- **Due date:** any date phrase, such as `by Friday`, `before Dec 3`, `next week` or `2026-12-01`. It is resolved relative to the **meeting date**, looking forward, so "by Friday" in a Friday meeting means that same day.
+- **Emails:** come from `people.json` in the notes folder (`{"Priya Nair": "priya.nair@example.com"}`) or from `Name <email>` attendees.
 
 ## Commands
 
@@ -74,11 +72,16 @@ Set `DEBUG=1` to print stack traces for unexpected errors.
 |---|---|
 | Same item in several meetings | Merged into one item when owner and normalized text match (case, punctuation, word order and filler words are ignored). The item keeps every source note. A newer meeting's due date replaces the older one. |
 | Reworded item (≥ 60% word overlap) | Kept as a separate item and flagged `dup? #id` in `list` and in the ingest report. |
-| No owner | Stored as `(unassigned)`; `list --owner unassigned` shows these items. |
+| No owner, or `Someone` / `Everyone` / `Team` / `TBD` | Stored as `(unassigned)`; `list --owner unassigned` shows these items. |
+| Several owners (`Anita & Rahul to …`) | One item per owner, linked to each other (`with #id`). Each is done separately and appears in its owner's follow-up. |
+| Helper in brackets (`Lena (with Priya) to …`) | Owned by Lena. |
 | No due date | Stored with an empty due date, so it is never overdue. Followup emails list it under "No due date yet". |
-| Two people with the same first name | The owner is resolved through the note's attendees. "Priya Sharma" resolves; plain "Priya" with two Priyas attending is stored as ambiguous and reported. To fix it, write the full name in the note and re-ingest. |
+| Two people with the same first name | Owners are resolved through the note's attendees. "Priya Nair", "Priya N." and `@priya.nair` resolve; a bare "Priya" with two Priyas attending is stored as ambiguous and reported. To fix it, write the full name in the note and re-ingest. |
+| Note without an attendees line | Owners are matched against everyone known from other notes and `people.json`, and a warning is shown. |
 | Name not in attendees | Stored as "not in attendees" and reported. |
-| Malformed note (no front-matter, bad YAML, bad date, binary or empty file) | Skipped and listed in the report; the run continues. |
+| Items inside `> quotes`, code blocks or `<!-- comments -->` | Ignored; they aren't agreed actions. |
+| Malformed note (no date, vague date, bad YAML, binary or empty file) | Skipped and listed in the report; the run continues. |
+| Missing email for a follow-up | `followup` exits 1 and says which line to add to `people.json`. |
 | Re-running ingest | Idempotent. Edited lines are re-processed, ticked `[x]` boxes mark items done, and items removed from notes are deleted. |
 
 ## Creating Gmail drafts (via Claude Code + Gmail MCP)
@@ -86,14 +89,14 @@ Set `DEBUG=1` to print stack traces for unexpected errors.
 The CLI builds the email itself, so Claude only relays it, which takes a few hundred tokens per draft.
 
 1. Authorize the **Gmail** connector in claude.ai under Settings → Connectors.
-2. In Claude Code, ask: *"Run `actiontrack followup priya.sharma@acme.com --json` and create a Gmail draft with exactly that to/subject/body. Do not send."*
+2. In Claude Code, ask: *"Run `actiontrack followup "Priya Nair" --json` and create a Gmail draft with exactly that to/subject/body. Do not send."*
 3. Review the draft in Gmail and send it yourself.
 
 Only the Gmail `create_draft` tool is used, never a send tool.
 
 ## Known limitations
 
-- An item names one owner. "Priya and Rahul to …" is stored as unassigned.
+- Owner resolution is per meeting. A first name shared by two attendees is never guessed.
 - The email is in English and plain text; edit the sign-off in Gmail before sending.
 
 ## Development
