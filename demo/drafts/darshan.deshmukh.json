@@ -1,0 +1,11 @@
+{
+  "to": "darshan.deshmukh@coditas.com",
+  "subject": "Follow-up: 4 open action items (2 overdue)",
+  "body": "Hi Darshan,\n\nHere is a quick follow-up on your open action items from recent meetings.\n\nOverdue:\n- Set up the Gmail connector for the team (was due Wed 18 Nov, from actiontrack kickoff on Tue 10 Nov)\n- Agree on the demo script (was due Fri 20 Nov, from actiontrack kickoff on Tue 10 Nov)\n\nUpcoming:\n- Record a 3-minute walkthrough video (due Thu 26 Nov, from Demo prep on Mon 23 Nov)\n\nNo due date yet:\n- Write the onboarding guide for new users (from actiontrack weekly sync on Tue 17 Nov)\n\nCould you reply with a quick status or a new date for each? Let me know if anything is blocked.\n\nThanks,",
+  "itemIds": [
+    2,
+    5,
+    9,
+    7
+  ]
+}

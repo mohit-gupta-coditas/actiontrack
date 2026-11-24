@@ -1,0 +1,11 @@
+{
+  "to": "gaurav.tupe@coditas.com",
+  "subject": "Follow-up: 4 open action items (2 overdue)",
+  "body": "Hi Gaurav,\n\nHere is a quick follow-up on your open action items from recent meetings.\n\nOverdue:\n- Review the parsing rules for owners and due dates (was due Fri 20 Nov, from actiontrack kickoff on Tue 10 Nov; actiontrack weekly sync on Tue 17 Nov)\n- Agree on the demo script (was due Fri 20 Nov, from actiontrack kickoff on Tue 10 Nov)\n\nUpcoming:\n- Add edge-case notes to the test fixtures (due Sat 28 Nov, from actiontrack weekly sync on Tue 17 Nov)\n- Prepare the demo dataset (due Tue 1 Dec, from Demo prep on Mon 23 Nov)\n\nCould you reply with a quick status or a new date for each? Let me know if anything is blocked.\n\nThanks,",
+  "itemIds": [
+    1,
+    4,
+    8,
+    10
+  ]
+}
