@@ -1,0 +1,730 @@
+actiontrack: full conversation log
+Session: d15ced94-cac6-4e08-8aa1-d315878604c4
+Exported: 2026-11-24T11:45:03.192Z
+
+Contains every user message, every Claude reply and every multiple-choice question with its answer.
+Tool calls are shortened to one-line [action] entries; raw tool output and internal reasoning are left out.
+
+================================================================================
+USER
+================================================================================
+Problem statement : 
+I have a lot of meeting notes as markdown files. Action items get lost as they are a lot and follow-up emails are written late or never written.
+
+What I want to build : 
+I want to build an meetings note taker application that can be used to read meetings notes, tracks the action items, and drafts follow-up emails for review.
+
+A CLI with four commands : 
+
+[pasted]
+
+1. actiontrack ingest <folder> parses every .md meeting note in the folder. Each note has
+   a date, attendees and free- appear as lines like - [ ]Priya to send the revised quote by Friday. The tool stores them with owner, task, due
+   date (resolved to a real daurce file and status.
+2. actiontrack list shows items. Filters: --owner, --status open|done|overdue,
+   --due-before <date>. Overdu
+3. actiontrack done <id> marks an item as done.
+4. actiontrack followup <ownerper owner covering their openand overdue items, and creates a Gmail draft through the Gmail MCP connector. It never sends.
+
+[/pasted]
+
+I want you to plan for this , before starting make a github repo on mohit-gupta-coditas github and we will start with work on the tool.
+
+For all the edge cases : 
+- 
+
+[pasted]
+
+Duplicate items repeated across several meetings.
+Items with no owner or no da
+Two people with the same first name.
+Malformed notes (skip them and report, don't crash).
+
+[/pasted]
+
+I want you to ask me questions on any gaps that you think and I want you to use the ask user question tool (give recommened with diffferent options).
+
+================================================================================
+CLAUDE
+================================================================================
+The pasted spec is cut off in a few places, for example "free- appear as lines like", "(resolved to a real daurce file" and "<ownerper owner". I also see some gaps in the design. I'll ask about those before I write the plan or create the repo.
+
+================================================================================
+CLAUDE (questions)
+================================================================================
+Q: Which language/stack should the actiontrack CLI be built in?
+   - Python + Typer (Recommended): Python 3.11+, Typer for CLI, SQLite for storage, dateparser for relative dates, pytest. Fastest path, great markdown/date libs.
+   - Node.js + TypeScript: commander/yargs CLI, better-sqlite3, chrono-node for dates, vitest. Good if your team is JS-first.
+   - Go: Single static binary, cobra CLI. More boilerplate for date/markdown parsing.
+
+Q: The CLI can't call a claude.ai MCP connector (Gmail) directly — MCP connectors are invoked by an AI client, not by a standalone program. How should `actiontrack followup` create the Gmail draft?
+   - CLI is an MCP server (Recommended): actiontrack also exposes its commands as an MCP server; Claude Code calls `followup` to get the email body, then calls the Gmail MCP `create_draft`. CLI stays offline-testable; never-send is guaranteed since no send tool is used.
+   - Gmail API directly: CLI uses Google OAuth + Gmail API `drafts.create` (scope gmail.compose). Fully standalone but needs Google Cloud OAuth setup; not the 'MCP connector' you named.
+   - Write .eml/markdown drafts: CLI writes draft files locally; you (or Claude) push them to Gmail via the MCP connector separately.
+
+Q: How should relative due dates like 'by Friday' be resolved to a real date?
+   - Relative to meeting date (Recommended): 'Friday' = first Friday on/after the meeting date in the note. 'next week' = Monday of following week. Unparseable → due date empty + flagged.
+   - Relative to ingest date: Resolve against today's date when `ingest` runs. Simpler, but wrong for old notes.
+
+Q: What counts as a duplicate action item across meetings?
+   - Same owner + normalized task (Recommended): Lowercase, strip punctuation/dates, fuzzy match (≥90% similarity). Keep one item, record all source files as 'seen in', keep earliest date and latest due date.
+   - Exact text match only: Only identical lines (after trimming) are merged. Predictable, but misses rephrasings.
+   - Never merge, just flag: Store every occurrence; `list` marks likely duplicates for you to resolve.
+
+
+================================================================================
+USER (answers)
+================================================================================
+Q: Which language/stack should the actiontrack CLI be built in?
+A: Node.js + TypeScript
+
+Q: The CLI can't call a claude.ai MCP connector (Gmail) directly — MCP connectors are invoked by an AI client, not by a standalone program. How should `actiontrack followup` create the Gmail draft?
+A: I want to use the least amount of tokens for this job how can we do it , what is your suggestion for my condition
+
+Q: How should relative due dates like 'by Friday' be resolved to a real date?
+A: Relative to meeting date (Recommended)
+
+Q: What counts as a duplicate action item across meetings?
+A: how are you going to perform a fuzzy match can you tell me. Again I want a easy to use and setup tool that will cost low tokens
+
+
+================================================================================
+CLAUDE (questions)
+================================================================================
+Q: Given low tokens + easy setup, how should `followup` get the draft into Gmail?
+   - Template + Gmail MCP relay (Recommended): CLI builds the full email (to/subject/body) from a template and prints JSON. Claude Code makes exactly one Gmail MCP create_draft call per owner, copying the payload as-is (~a few hundred tokens per draft). No Google Cloud/OAuth setup. Needs Gmail connector authorized in claude.ai (currently NOT authorized in this session).
+   - Gmail API directly (0 tokens): CLI calls Gmail drafts.create itself. Zero tokens ever, fully standalone, but one-time setup: Google Cloud project, OAuth client, gmail.compose scope, token file.
+   - Both, MCP default: Ship MCP relay now, add `--gmail-api` mode later. Slightly more code.
+
+Q: Duplicate matching threshold (same owner, word-overlap after normalization)?
+   - 0.8 overlap, merge (Recommended): Catches rephrasings like 'send revised quote' vs 'send the quote revised'. Merged item keeps all source files. Zero tokens, no extra dependency.
+   - Exact after normalization: Only merge when normalized text is identical. Most predictable, misses rewordings.
+   - 0.6 overlap, flag only: Looser match but never auto-merge; `list` shows a 'possible duplicate of #id' hint.
+
+Q: How should owners be identified, given two people can share a first name (e.g. two Priyas)?
+   - Resolve via attendees list (Recommended): Attendees line holds full names/emails (e.g. 'Priya Sharma <priya.s@x.com>'). 'Priya' maps to the unique matching attendee in that meeting; if 2+ match, item is stored as ambiguous and reported. Owner key = email.
+   - people.json directory: A config file maps aliases → email. Most explicit, but you maintain the file.
+   - Attendees + people.json fallback: Use attendees first, fall back to people.json for aliases/nicknames.
+
+Q: What exact format do your meeting notes use for date and attendees?
+   - YAML front-matter (Recommended): ---\ndate: 2026-11-20\nattendees: [Priya Sharma <priya@x.com>, ...]\n--- then free text with '- [ ] ...' items. Easiest to parse reliably.
+   - Heading lines: 'Date: 2026-11-20' and 'Attendees: Priya Sharma, Rahul Mehta' lines near the top of the file.
+   - Support both: Try front-matter first, then 'Date:'/'Attendees:' lines; anything else is malformed.
+
+
+================================================================================
+USER (answers)
+================================================================================
+Q: Given low tokens + easy setup, how should `followup` get the draft into Gmail?
+A: Template + Gmail MCP relay (Recommended)
+
+Q: Duplicate matching threshold (same owner, word-overlap after normalization)?
+A: can you explain how different ways will work
+
+Q: How should owners be identified, given two people can share a first name (e.g. two Priyas)?
+A: Resolve via attendees list (Recommended)
+
+Q: What exact format do your meeting notes use for date and attendees?
+A: YAML front-matter (Recommended)
+
+
+================================================================================
+CLAUDE (questions)
+================================================================================
+Q: Which duplicate strategy should actiontrack use?
+   - Exact merge + 0.6 flag (Recommended): Auto-merge only when normalized text is identical (safe), and flag near-matches ≥0.6 as 'possible duplicate of #id' in `list`. Never wrongly merges, still surfaces rewordings.
+   - 0.8 overlap, auto-merge: Merges rewordings automatically. Small risk of merging two distinct short tasks.
+   - Exact after normalization: Simplest; rewordings appear as separate items.
+
+Q: How should items with no owner or no due date be handled?
+   - Store + flag (Recommended): No owner → owner 'unassigned', shown in `list --owner unassigned` and in the ingest report. No due date → due empty, never overdue, still included in followups as 'no due date'.
+   - Skip and report: Don't store them; list them in the ingest report so you fix the note and re-ingest.
+
+Q: GitHub repo for mohit-gupta-coditas: name and visibility?
+   - actiontrack, private (Recommended): github.com/mohit-gupta-coditas/actiontrack, private. Meeting notes/test fixtures stay non-public.
+   - actiontrack, public: Public repo; only synthetic sample notes committed.
+
+Q: Where should the repo live locally?
+   - Current folder (Recommended): Initialize git in c:\Users\Coditas-Admin\Documents\ai-practioners-exam (currently empty / not a repo).
+   - Subfolder ./actiontrack: Create ai-practioners-exam/actiontrack and init there.
+
+
+================================================================================
+USER (answers)
+================================================================================
+Q: Which duplicate strategy should actiontrack use?
+A: Exact merge + 0.6 flag (Recommended)
+
+Q: How should items with no owner or no due date be handled?
+A: Store + flag (Recommended)
+
+Q: GitHub repo for mohit-gupta-coditas: name and visibility?
+A: actiontrack, private (Recommended)
+
+Q: Where should the repo live locally?
+A: Subfolder ./actiontrack
+
+  [action] ran: Check folder contents, gh auth, and Node versions
+
+================================================================================
+CLAUDE
+================================================================================
+Next I'll write the plan into the repo and push it.
+  [action] ran: Create the actiontrack project folder
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\PLAN.md
+  [action] ran: Add README and gitignore, commit, create private GitHub repo and push
+
+================================================================================
+USER
+================================================================================
+[Request interrupted by user]
+
+================================================================================
+USER
+================================================================================
+dont just start working make a plan for the implemenation and then start to work.
+  [action] entered plan mode
+  [action] wrote file: C:\Users\Coditas-Admin\.claude\plans\enumerated-swimming-cocoa.md
+  [action] presented the implementation plan for approval
+
+[user approved the plan]
+
+================================================================================
+CLAUDE
+================================================================================
+Plan approved. Starting with Step 1, the scaffold.
+  [action] ran: Create package.json and install dependencies
+  [action] ran: Write tsconfig and check node:sqlite works
+
+================================================================================
+CLAUDE
+================================================================================
+Now the DB layer and the CLI entry.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\db.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\cli.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\program.ts
+  [action] ran: Build, smoke-test help output, commit scaffold
+  [action] ran: Add node types to tsconfig, rebuild, commit
+
+================================================================================
+CLAUDE
+================================================================================
+Step 1 is committed. Next, Step 2: the parsers.
+  [action] ran: Probe chrono-node behavior for due phrases
+
+================================================================================
+CLAUDE
+================================================================================
+chrono resolves "by Friday" from a Friday meeting to that same day, which matches the agreed "on or after" rule. Now writing the parser modules.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\owner.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\due.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\dates.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\dedup.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\note.ts
+
+================================================================================
+CLAUDE
+================================================================================
+Next I'll add an `owner_key` column to the schema. Dedup and filtering will use it.
+  [action] ran: Add owner_key column to schema and row type
+
+================================================================================
+CLAUDE
+================================================================================
+Now the fixtures and the parser tests.
+  [action] ran: Create meeting-note fixtures covering edge cases
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\parse.test.ts
+  [action] ran: Run parser unit tests
+
+================================================================================
+CLAUDE
+================================================================================
+All 20 parser tests pass. Committing Step 2.
+  [action] ran: Typecheck and commit parser step
+
+================================================================================
+CLAUDE
+================================================================================
+Step 3: `ingest`. Commands return data so they're testable, and `program.ts` handles printing.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] ran: Track source line text so edited notes re-ingest correctly
+
+================================================================================
+CLAUDE
+================================================================================
+The script's escaping failed on the ingest file, but the `db.ts` change did apply. I'll redo the ingest edits with the Edit tool.
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] ran: Add removed counter and typecheck
+
+================================================================================
+CLAUDE
+================================================================================
+One more case: lines that disappear from a note, through deletion or shrinking, should drop their sources too.
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+
+================================================================================
+CLAUDE
+================================================================================
+Now `list`, `done`, `followup` and the email template.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\owners.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\list.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\done.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\email\template.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\followup.ts
+
+================================================================================
+CLAUDE
+================================================================================
+Now wiring everything into `program.ts` with the human-readable output.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\program.ts
+  [action] ran: Build and run ingest twice plus list end-to-end
+
+================================================================================
+CLAUDE
+================================================================================
+Ingest works: duplicates merge, malformed notes are skipped and reported, and re-ingest is idempotent. Next I'll check the other commands.
+  [action] ran: Exercise list filters, done, followup and error paths
+
+================================================================================
+CLAUDE
+================================================================================
+Every command and error path behaves as designed. Next I'll lock this in with integration tests, including the edit-a-note-and-re-ingest case.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\commands.test.ts
+  [action] ran: Run all tests
+
+================================================================================
+CLAUDE
+================================================================================
+All 36 tests pass. I'll commit Steps 3–5 as separate commits.
+  [action] ran: Commit ingest, list/done, followup steps separately
+
+================================================================================
+CLAUDE
+================================================================================
+Step 6: the README, a small sync of PLAN.md, and then the push.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\README.md
+  [action] ran: Sync PLAN.md, add gitattributes and prepare script, test, commit and push
+
+================================================================================
+CLAUDE
+================================================================================
+The `actiontrack` CLI is built and pushed to **github.com/mohit-gupta-coditas/actiontrack** (private). The 36 automated tests pass, and I ran all four commands against sample notes. The step that creates a draft in Gmail hasn't been tried yet, because the Gmail connector isn't authorized in this session.
+
+**What I checked by running it on 7 sample notes (3 good, 4 broken):**
+- **Malformed notes:** all 4 broken files were skipped with a reason each (no front-matter, bad YAML, bad date, empty), and the run kept going.
+- **Duplicates:** the same task repeated in three meetings became one item that links to all three notes.
+  - When a later meeting gives a new due date, the item takes the newer date.
+  - A reworded version ("send updated revised quote to Acme") stays separate and is flagged as a possible duplicate.
+- **Same first name:** "Priya Sharma" resolves to her email. Plain "Priya" with two Priyas in the meeting is stored as ambiguous and reported.
+  - `list --owner Priya` stops with an error that lists the matching owners.
+  - Writing the full name in the note and re-ingesting fixes it.
+- **No owner / no due date:** stored and flagged. Items with no due date are never overdue, and the email lists them under "No due date yet".
+- **Done items:** a `[x]` in a later meeting marks the item done. `done <id>` rejects IDs that don't exist or aren't numbers.
+- **Follow-up email:** written from a template by plain code, with sections for overdue, upcoming and no-due items, each with its source meeting. Owners with no email address are refused.
+- **Re-running ingest** on the same folder adds nothing new.
+
+**Changes from the plan you approved:**
+- **Storage:** I used Node's built-in SQLite instead of `better-sqlite3`, so setup on Windows needs no native build (this was noted in the plan).
+- **Editing notes now works:** each source line's text is stored, so when you edit a note and re-ingest, changed lines are re-processed, item IDs stay the same, and items deleted from notes are removed.
+- **`--status open` includes overdue items:** "overdue" means open items past their due date. Say if you'd rather "open" exclude them.
+- **Items with two owners:** a line like "Priya and Rahul to …" is stored as unassigned. This is listed under known limitations in the README.
+
+**To try it:**
+```sh
+cd actiontrack && npm install && npm link
+actiontrack ingest <your-notes-folder>
+actiontrack list --status overdue
+actiontrack followup <email> --json
+```
+
+**To create the Gmail draft:** authorize the Gmail connector in claude.ai (Settings → Connectors). Then ask me to run `followup … --json` and make a draft from it. That's one draft-creation call, a few hundred tokens, and nothing is ever sent.
+
+================================================================================
+USER
+================================================================================
+I want you to follow the most optimum standards for CLI tools
+1. Argument Prasing  : Use a standard argument parser. Never parse 'argv'
+Node.js -> commander , yargs, clack
+
+convention : 
+- flags before arguments
+- '--' separates options from positional args
+- '-h' shows usage
+- '-v' shows version
+
+2. Exit codes : 
+0 - success
+1 - general error
+2 - misuse
+127 - command not found
+130 - interrupted
+
+3. output channels
+stdout -> command output (data, result, lists)
+stderr -> logs warnnings, error
+
+================================================================================
+CLAUDE
+================================================================================
+I'll first check what commander does by default against these rules, then fix the gaps.
+  [action] ran: Check current exit codes for each convention case
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\errors.ts
+  [action] ran: Route commands through the new error classes
+
+================================================================================
+CLAUDE
+================================================================================
+Next I'll rewrite `program.ts`. `run()` will return an exit code and write through injectable stdout/stderr, so the conventions can be tested directly.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\program.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\cli.ts
+  [action] ran: Verify exit codes and stdout/stderr split per case
+
+================================================================================
+CLAUDE
+================================================================================
+Every exit code now matches the convention: `-v` prints the version, and `--` works. Next I'll check the stdout/stderr split for ingest and followup.
+  [action] ran: Check stdout/stderr separation and pipe handling
+
+================================================================================
+CLAUDE
+================================================================================
+The streams are separated correctly. Next I'll add tests that lock in these conventions.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\cli.test.ts
+  [action] ran: Run full test suite
+  [action] ran: Close the DB after each command and rerun tests
+
+================================================================================
+CLAUDE
+================================================================================
+All 58 tests pass. I'll document the conventions in the README, then commit and push.
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\README.md
+  [action] ran: Commit and push CLI conventions work
+
+================================================================================
+CLAUDE
+================================================================================
+The CLI now follows all three standards, and the change is pushed to `main`. All 58 tests pass, including 22 new ones for these conventions. The one thing I couldn't test is the Ctrl+C exit code of 130, because Windows can't send that signal to a process from a script.
+
+**1. Argument parsing (commander, no hand-parsing of `argv`)**
+- `-h` / `--help` prints usage and `-v` / `--version` prints the version, both exiting 0. Before this change, `-v` wasn't supported.
+- Flags work before arguments (`ingest --json notes/`), and anything after `--` is treated as a positional argument (`done -- 12`).
+
+**2. Exit codes**
+
+| Case | Before | Now |
+|---|---|---|
+| Success, `-h`, `-v` | 0 / 1 for `-v` | **0** |
+| Unknown item id, missing folder, ambiguous owner | 1 | **1** |
+| No command, unknown option, missing or invalid argument (`done abc`, `--status x`) | 1 | **2** |
+| Unknown command (`actiontrack bogus`) | 1 | **127** |
+| Ctrl+C | not handled | **130** |
+
+**3. Output channels**
+- **stdout** carries only results: the list table, the ingest summary, the email, the `done` confirmation, and all `--json` output. `--json` output can always be piped straight into another tool.
+- **stderr** carries everything else: the skipped-file and ambiguous-owner warnings, "No matching items", "Preview only; nothing was sent", and all errors.
+
+**Fixed along the way:**
+- **Database left open:** the new tests showed commands never closed the database, which locks the file on Windows. Each command now closes it when done.
+- **Early pipe close:** `actiontrack list | head` now exits 0 instead of crashing.
+
+The README has a new Conventions section with the exit-code table. Setting `DEBUG=1` prints stack traces for unexpected errors.
+
+================================================================================
+USER
+================================================================================
+add a how to use .md file with how to set this up on anylaptop and how to run it guide in a simplemanner
+
+================================================================================
+CLAUDE
+================================================================================
+I'll check the setup steps on a fresh clone first, so the guide describes what actually works.
+  [action] ran: Fresh clone, install, and run to validate setup steps
+
+================================================================================
+CLAUDE
+================================================================================
+A fresh clone works: `npm install` builds the tool automatically, and `npx actiontrack` runs it inside the folder without any linking. Writing the guide now.
+  [action] wrote file: c:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\HOW_TO_USE.md
+  [action] ran: Link guide from README, commit and push
+
+================================================================================
+CLAUDE
+================================================================================
+The README link didn't go in, because my earlier rewrite had removed the line the edit was meant to replace. I'll add the link directly.
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\README.md
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\README.md
+  [action] ran: Commit README link and push
+
+================================================================================
+CLAUDE
+================================================================================
+Written for: someone setting actiontrack up on a new laptop, who may not be technical.
+
+I added [HOW_TO_USE.md](HOW_TO_USE.md) to the repo, linked it from the top of the README, and pushed both. Before writing it, I tested the setup steps on a fresh clone of the repo:
+- `npm install` downloads everything and builds the tool in one step.
+- `actiontrack -v` printed the version.
+- `ingest` on the sample notes worked.
+- `npx actiontrack …` works inside the project folder without the `npm link` step.
+
+The guide has seven short sections:
+1. **One-time setup:** install Node.js and Git, clone the repo, run `npm install` and `npm link`, then check with `actiontrack -v`. It notes that the repo is private, so each new user needs to be added as a collaborator first.
+2. **Writing notes:** a copy-paste template with the date, attendees and action items, plus the naming and due-date rules.
+3. **Everyday use:** ingest, list (with examples of each filter), done, and followup.
+4. **Gmail drafts:** how to connect Gmail once in claude.ai, the exact request to give Claude, and a reminder to review the draft in Gmail before sending.
+5. **Quick reference:** a table that maps "I want to…" to the command.
+6. **Updating:** `git pull` then `npm install`; tracked items are kept.
+7. **Troubleshooting:** command not found, old Node.js, the ambiguous-name error, skipped notes, missing email, starting over, and keeping the data somewhere else.
+
+================================================================================
+USER
+================================================================================
+$ actiontrack ingest C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\notes
+error: not a folder: C:UsersCoditas-AdminDocumentsai-practioners-examactiontracknotes
+
+================================================================================
+CLAUDE
+================================================================================
+Your shell ate the backslashes before actiontrack saw the path. The `$` prompt means you're in Git Bash, which treats `\` as an escape character, so `C:\Users\...` arrived as `C:Users...`. Any of these will work:
+
+```sh
+actiontrack ingest "C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\notes"   # quoted
+actiontrack ingest C:/Users/Coditas-Admin/Documents/ai-practioners-exam/actiontrack/notes     # forward slashes
+actiontrack ingest notes                                                                      # relative, from inside actiontrack/
+```
+
+My guide got this wrong: it told Windows users to type plain backslashes, which only works in PowerShell. I'll fix the guide, and make the tool's error point out this mistake. First I'll check that the folder exists.
+  [action] ran: Check whether the notes folder exists
+
+================================================================================
+CLAUDE
+================================================================================
+The folder exists, so the path was the only problem. Next I'll add a hint to the error message for this case.
+  [action] searched for: not a folder
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\HOW_TO_USE.md
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\HOW_TO_USE.md
+  [action] ran: Rebuild and reproduce the unquoted path, then try the quoted path
+  [action] ran: Inspect the format of several real notes
+  [action] ran: Survey header formats, attendees and item variants across notes
+  [action] ran: View blockquote context and tally item owner prefixes
+
+================================================================================
+CLAUDE (questions)
+================================================================================
+Q: None of your 35 notes contain email addresses (Attendees: Priya Nair, Rahul Mehta, ...). Where should `followup` get each person's email?
+   - people.json directory (Recommended): One small file mapping full name -> email (9 people today). Notes stay as they are. Followup errors clearly if someone is missing from it. Zero tokens.
+   - Email pattern: Derive from a pattern like firstname.lastname@coditas.com. No file to maintain, but wrong for anyone outside the pattern (external clients, nicknames).
+   - Ask at followup time: `actiontrack followup "Priya Nair" --to priya@x.com`. Nothing to set up, but you type the email every time.
+
+
+================================================================================
+USER (answers)
+================================================================================
+Q: None of your 35 notes contain email addresses (Attendees: Priya Nair, Rahul Mehta, ...). Where should `followup` get each person's email?
+A: people.json directory (Recommended)
+
+  [action] ran: Show current note and owner parser sections
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\owner.ts
+  [action] ran: Show the ownerKey function
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\owner.ts
+
+================================================================================
+CLAUDE
+================================================================================
+Next I'll rewrite the note parser to read both header styles and to skip code fences, HTML comments and blockquotes.
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\note.ts
+
+================================================================================
+CLAUDE
+================================================================================
+Next is the people directory: a DB table, loaded from `people.json` during `ingest`.
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\db.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\people.ts
+  [action] ran: Locate ingest report setup lines
+  [action] ran: Load people.json during ingest and count it in the report
+
+================================================================================
+CLAUDE
+================================================================================
+Now `--owner <email>` lookup and the email resolution in `followup`.
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\owners.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\owners.ts
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\followup.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\followup.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\followup.ts
+  [action] ran: Typecheck and run tests to see what the changes broke
+  [action] ran: Update changed tests and add header-format fixtures
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\headers.test.ts
+  [action] ran: Run the full test suite
+
+================================================================================
+CLAUDE
+================================================================================
+All 69 tests pass. Now the real check: your 35 notes.
+  [action] ran: Ingest the real notes folder into a temp DB
+
+================================================================================
+CLAUDE
+================================================================================
+31 of 35 notes now load, and the 4 skipped are genuinely broken. The unassigned list shows more owner styles in your notes, so I'll look at those lines before deciding anything.
+  [action] ran: View raw lines behind the unassigned and skipped notes
+
+================================================================================
+CLAUDE (questions)
+================================================================================
+Q: Some items name several owners, e.g. "- [ ] Anita & Rahul to agree on the component API by Wednesday". How should these be stored?
+   - One item per owner (Recommended): Split into 2 linked items (Anita's copy, Rahul's copy). Each shows in their own list and follow-up email; each is marked done separately.
+   - First person owns it: Anita owns it; Rahul is mentioned only in the task text. Simple, but Rahul's follow-up won't include it.
+   - Unassigned + reported: Keep current behaviour: stored as unassigned and listed in the ingest warnings for you to fix by hand.
+
+Q: 2026-09-23-standup.md has no Attendees line, so "Rahul to rebase…" and "Sam to rotate…" can't be resolved. What should happen when a note has no attendees?
+   - Fall back to everyone known (Recommended): Match against all people seen in other notes + people.json. "Sam" -> Sam Okafor (only one Sam). "Rahul" stays ambiguous (Rahul Mehta / Rahul Verma). Still warns that the note lacks attendees.
+   - Keep as 'not in attendees': Strict: only the note's own attendees count. Both items stay unresolved and reported; you fix the note.
+
+
+================================================================================
+USER (answers)
+================================================================================
+Q: Some items name several owners, e.g. "- [ ] Anita & Rahul to agree on the component API by Wednesday". How should these be stored?
+A: One item per owner (Recommended)
+
+Q: 2026-09-23-standup.md has no Attendees line, so "Rahul to rebase…" and "Sam to rotate…" can't be resolved. What should happen when a note has no attendees?
+A: Fall back to everyone known (Recommended)
+
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\owner.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\parse\owner.ts
+
+================================================================================
+CLAUDE
+================================================================================
+Next, the note parser: one parsed item per owner, plus an optional fallback roster.
+  [action] ran: Emit one parsed item per owner and accept a fallback roster
+
+================================================================================
+CLAUDE
+================================================================================
+Now the database. Source rows need a `slot` so one line can feed two items, and an existing DB needs migrating. Reading both files in full:
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\db.ts
+  [action] read file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\src\commands\ingest.ts
+  [action] ran: Inspect your real actiontrack database (read-only)
+
+================================================================================
+CLAUDE
+================================================================================
+Your real database already exists with the old schema, though it has no items yet. A proper migration is needed, not a "delete your DB" instruction.
+  [action] ran: Add slot column with migration, roster fallback and per-slot sources in ingest
+
+================================================================================
+CLAUDE
+================================================================================
+The shell choked on the inline script's quoting. I'll write the script to a scratch file and run it from there.
+  [action] wrote file: C:\Users\CODITA~1\AppData\Local\Temp\claude\c--Users-Coditas-Admin-Documents-ai-practioners-exam\d15ced94-cac6-4e08-8aa1-d315878604c4\scratchpad\patch_slots.py
+  [action] ran: Apply the slot, migration and roster patch, then typecheck
+
+================================================================================
+CLAUDE
+================================================================================
+The patch applied and type-checks. Next I'll surface the link between split items: `list` will show "with #id" and the JSON output gets a `linked` field.
+  [action] ran: Expose linked multi-owner items in list output, run tests
+
+================================================================================
+CLAUDE
+================================================================================
+Tests still pass. Next I'll add test cases for @mentions, "(with X)", multi-owner splits, the attendee fallback and the DB migration.
+  [action] ran: Extend fixtures with real-note owner patterns
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\headers.test.ts
+  [action] edited file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\headers.test.ts
+  [action] wrote file: C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\test\db.test.ts
+  [action] ran: Run full test suite with the new cases
+
+================================================================================
+CLAUDE
+================================================================================
+All 76 tests pass. I'll rerun on your real notes. The run uses a copy of your actual database, so the old-schema migration gets exercised too.
+  [action] ran: Ingest real notes into a copy of your existing DB, then re-run
+  [action] ran: Spot-check tricky real items and the follow-up email path
+  [action] ran: Show doc section layout and the note-format section
+  [action] wrote file: C:\Users\CODITA~1\AppData\Local\Temp\claude\c--Users-Coditas-Admin-Documents-ai-practioners-exam\d15ced94-cac6-4e08-8aa1-d315878604c4\scratchpad\howto_section2.md
+  [action] ran: Replace the guide's note-format section and fix troubleshooting row
+
+================================================================================
+CLAUDE
+================================================================================
+Now the README's note-format, edge-case and limitations sections.
+  [action] ran: Show README edge-case and limitations sections
+  [action] wrote file: C:\Users\CODITA~1\AppData\Local\Temp\claude\c--Users-Coditas-Admin-Documents-ai-practioners-exam\d15ced94-cac6-4e08-8aa1-d315878604c4\scratchpad\patch_readme.py
+  [action] ran: Update README and PLAN for the real note format
+  [action] ran: Fix escaped quotes in README and verify PLAN rows
+
+================================================================================
+CLAUDE
+================================================================================
+The docs are updated. I'll run a final full check, then commit. Your `notes/` folder stays out of the commit, because it's your data.
+  [action] ran: Build, test, commit code and docs, push
+
+================================================================================
+CLAUDE
+================================================================================
+That error came from Git Bash, not actiontrack: Git Bash strips unquoted backslashes from a path. Quote the path or use forward slashes:
+
+```sh
+actiontrack ingest "C:\Users\Coditas-Admin\Documents\ai-practioners-exam\actiontrack\notes"
+# or
+actiontrack ingest C:/Users/Coditas-Admin/Documents/ai-practioners-exam/actiontrack/notes
+```
+
+The tool now prints a hint when it sees a path mangled this way.
+
+Once the path worked, a bigger problem showed up: **33 of your 35 notes were skipped.** They use plain `# Meeting:` / `Date:` / `Attendees:` lines instead of the YAML header we'd planned for, and they have no email addresses. I've fixed that and pushed it. All 76 tests pass, and against your real notes it now reads **31 of 35 notes, giving 114 items**. Running it a second time adds nothing.
+
+The 4 notes still skipped are genuinely unusable: one empty file, one binary file, one with no header at all, and one dated "sometime last week".
+
+**What it now handles in your notes:**
+- Full written dates like "Monday, 14 September 2026".
+- Owners written as `@anita:`, `Priya N.` and `Lena (with Priya)`.
+- `Anita & Rahul to …` becomes two linked items, one each, as you chose.
+- The standup note with no attendees resolves Sam to Sam Okafor. "Rahul" stays ambiguous there because there are two Rahuls.
+- `Someone`, `Everyone`, `TBD` and `Team` are stored as unassigned.
+- Items inside a quote, a comment or a code block are ignored. Your incident review says the quoted refund line was "not an agreed action", and your security review comments out the hardware-tokens line.
+
+Your existing database at `~/.actiontrack` used the old layout. It updates itself automatically the next time you run a command; I tested this on a copy of it.
+
+**What you need to do:**
+1. **Create `notes/people.json`** with the real email addresses. Follow-ups can't be addressed without it, and `followup` will tell you which name is missing:
+   ```json
+   {
+     "Priya Nair": "…", "Priya Shah": "…", "Rahul Mehta": "…", "Rahul Verma": "…",
+     "Anita Desai": "…", "Sam Okafor": "…", "Karan Joshi": "…", "Meera Iyer": "…", "Lena Fischer": "…"
+   }
+   ```
+2. **Run the ingest command again** with the quoted path. `actiontrack` already runs the new version, because `npm link` points at this folder and it has been rebuilt.
+3. **Optionally, fix the 6 ambiguous owners** (bare "Priya" or "Rahul" in five notes) by writing the full name, then ingest again. The ingest report lists each file and line.
+
+HOW_TO_USE.md now covers the header format, `people.json`, and Git Bash paths. I didn't commit your `notes/` folder, because it's your meeting data. Tell me if you want it in the repo.
+
+================================================================================
+USER
+================================================================================
+make a whole converstion.txt file that will contain the whole conversation that we had and push it to github
+
+================================================================================
+CLAUDE
+================================================================================
+I'll build the file from Claude Code's saved session log rather than from memory, so the wording is exact. First I'll find the log.
+  [action] ran: Locate the saved session transcript
+  [action] ran: Inspect the transcript record structure
+  [action] wrote file: C:\Users\CODITA~1\AppData\Local\Temp\claude\c--Users-Coditas-Admin-Documents-ai-practioners-exam\d15ced94-cac6-4e08-8aa1-d315878604c4\scratchpad\export_conversation.js
+  [action] ran: Export the transcript to conversation.txt and check it
+  [action] ran: Show every answers section
+
+================================================================================
+CLAUDE
+================================================================================
+The last round is garbled: those questions contain their own quotation marks, which broke the matching. I'll match each answer against the exact question text instead.
+  [action] edited file: C:\Users\CODITA~1\AppData\Local\Temp\claude\c--Users-Coditas-Admin-Documents-ai-practioners-exam\d15ced94-cac6-4e08-8aa1-d315878604c4\scratchpad\export_conversation.js
+  [action] edited file: C:\Users\CODITA~1\AppData\Local\Temp\claude\c--Users-Coditas-Admin-Documents-ai-practioners-exam\d15ced94-cac6-4e08-8aa1-d315878604c4\scratchpad\export_conversation.js
+  [action] ran: Re-export and verify the tricky answers
