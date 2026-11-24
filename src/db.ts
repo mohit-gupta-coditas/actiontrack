@@ -27,6 +27,7 @@ export interface SourceRow {
   item_id: number;
   file_path: string;
   line_no: number;
+  raw_text: string;
   meeting_title: string | null;
   meeting_date: string;
 }
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS item_sources (
   item_id       INTEGER NOT NULL REFERENCES items(id),
   file_path     TEXT NOT NULL,
   line_no       INTEGER NOT NULL,
+  raw_text      TEXT NOT NULL,
   meeting_title TEXT,
   meeting_date  TEXT NOT NULL,
   UNIQUE (file_path, line_no)
